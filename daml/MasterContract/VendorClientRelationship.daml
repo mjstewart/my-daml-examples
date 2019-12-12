@@ -1,0 +1,25 @@
+daml 1.2
+module VendorClientRelationship where
+
+template VendorClientRelationship
+  with
+    vendor : Party
+    client : Party
+    effectiveFrom : Time
+    effectiveTo : Optional Time
+    identifier : Text
+    description : Text
+  where
+    signatory vendor, client
+
+
+template AppAccessRequest
+  with
+    relationship : VendorClientRelationship
+  where
+    signatory relationship.vendor
+
+    controller relationship.client can
+      AppAccessRequest_Accept : ContractId VendorClientRelationship
+        do
+          create relationship

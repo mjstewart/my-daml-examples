@@ -1,0 +1,72 @@
+daml 1.2
+module Test where
+
+import AcmeTodoMaster
+import TodoManager
+import Todo
+import VendorClientRelationship
+import DA.Time
+
+flow = scenario do
+  [acme, alice, bob, rogue] <- mapA getParty ["ACME", "alice", "bob", "rogue"]
+
+  submitMustFail rogue do
+    create AcmeTodoAppMaster with operator = rogue
+
+  master <- submit acme do
+    create AcmeTodoAppMaster with operator = acme
+
+  master_invite_alice <- submit acme do
+    exercise master AcmeTodoAppMaster_Invite with
+      manager = TodoManager with
+        operator = acme
+        client = alice
+
+
+  alice_todo_manager <- submit alice do
+    exercise master_invite_alice AcmeTodoAppInvite_Accept
+
+  -- You cant just go ahead and create TodoManager since it will
+  -- fail without auto from ACME in this case
+  submitMustFail alice do
+    create TodoManager with
+      operator = acme
+      client = alice
+
+  -- same as above since all 3 people need signatory
+  submitMustFail alice do
+    create AssignedTodo with
+      operator = acme
+      client = alice
+      assignee = bob
+      description = "mow the lawns"
+      priority = High
+
+  now <- pass (minutes 1)
+  future <- pass (minutes 2)
+
+  acme_alice_access_request <- submit acme do
+    create AppAccessRequest with
+      relationship = VendorClientRelationship with
+        vendor = acme
+        client = alice
+        effectiveFrom = now
+        effectiveTo = Some future
+        identifier = "acme_alice_todoapp"
+        description = "ACME permits alice access to the Todo App"
+
+  acme_alice_relationship <- submit alice do
+    exercise acme_alice_access_request AppAccessRequest_Accept
+
+  submit alice do
+    exercise alice_todo_manager TodoManager_Assign with
+      token = acme_alice_relationship
+      todo = AssignedTodo with
+        operator = acme
+        client = alice
+        assignee = bob
+        description = "mow the lawns"
+        priority = High
+
+
+  pure ()

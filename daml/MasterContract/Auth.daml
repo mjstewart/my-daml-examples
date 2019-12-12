@@ -1,0 +1,20 @@
+daml 1.2
+module Auth where
+
+import VendorClientRelationship
+
+data AuthRequestData = AuthRequestData with
+  vendor : Party
+  client : Party
+  now : Time
+
+-- Potentiall return Validation type and accumulate specific reasons of why
+isPermitted :
+  AuthRequestData
+  -> VendorClientRelationship
+  -> Bool
+isPermitted req relationship =
+  req.vendor == relationship.vendor &&
+  req.client == relationship.client &&
+  req.now >= relationship.effectiveFrom &&
+  req.now <= optional req.now identity relationship.effectiveTo

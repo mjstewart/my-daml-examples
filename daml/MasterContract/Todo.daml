@@ -1,0 +1,66 @@
+daml 1.2
+module Todo where
+
+import VendorClientRelationship
+
+data PriorityData
+ = Low
+ | Medium
+ | High
+  deriving (Show, Eq)
+
+
+template AssignTodoRequest
+  with
+    todo : AssignedTodo
+  where
+    signatory todo.operator, todo.client
+
+    controller todo.assignee can
+      AssignTodo_Start : ContractId AssignedTodo
+        with
+          token : VendorClientRelationship
+        do
+          create todo
+
+template AssignedTodo
+  with
+    operator : Party
+    client : Party
+    assignee : Party
+    description : Text
+    priority : PriorityData
+  where
+    signatory operator, client, assignee
+
+    controller assignee can
+      AssignedTodo_Start : ContractId StartedTodo
+        with
+          token : VendorClientRelationship
+        do
+          create StartedTodo with {..}
+
+template StartedTodo
+  with
+    operator : Party
+    client : Party
+    assignee : Party
+    description : Text
+    priority : PriorityData
+  where
+    signatory operator, client, assignee
+
+    controller assignee can
+      StartedTodo_Complete : ContractId CompletedTodo
+        do
+          create CompletedTodo with {..}
+
+template CompletedTodo
+  with
+    operator : Party
+    client : Party
+    assignee : Party
+    description : Text
+    priority : PriorityData
+  where
+    signatory operator, client, assignee

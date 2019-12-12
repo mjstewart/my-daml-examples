@@ -1,0 +1,32 @@
+daml 1.2
+module TodoManager where
+
+import Todo
+import VendorClientRelationship
+import Auth
+
+
+template TodoManager
+  with
+    operator : Party
+    client : Party
+  where
+    signatory operator, client
+
+    ensure operator /= client
+
+    controller client can
+      nonconsuming
+        TodoManager_Assign : ContractId AssignTodoRequest
+          with
+            token : ContractId VendorClientRelationship
+            todo : AssignedTodo
+          do
+            relationship <- fetch token
+            now <- getTime
+
+            assertMsg "not permitted" $ isPermitted
+              (AuthRequestData with vendor = operator; client; now)
+              relationship
+
+            create AssignTodoRequest with todo

@@ -1,0 +1,35 @@
+daml 1.2
+module AcmeTodoMaster where
+
+import TodoManager
+
+template AcmeTodoAppMaster
+  with
+    operator : Party
+  where
+    signatory operator
+
+    ensure show operator == "'ACME'"
+
+    controller operator can
+      nonconsuming
+        AcmeTodoAppMaster_Invite : ContractId AcmeTodoAppInvite
+          with
+            manager : TodoManager
+          do
+            -- create an invitation accept expiry time ?
+            create AcmeTodoAppInvite with manager
+
+template AcmeTodoAppInvite
+  with
+    -- this is what the client is needing to begin interacting with the TodoApp
+    manager : TodoManager
+  where
+    signatory manager.operator
+
+    ensure show manager.operator == "'ACME'"
+
+    controller manager.client can
+      AcmeTodoAppInvite_Accept : ContractId TodoManager
+        do
+          create manager
