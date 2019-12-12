@@ -14,8 +14,13 @@ template AssignTodoRequest
   with
     todo : AssignedTodo
   where
+    -- this layer guards creation since op and client
+    -- must be sigs and capturing both of these must be done as part
+    -- of more than 1 step in workflow to capture the sigs
     signatory todo.operator, todo.client
 
+    -- token adds another layer to implement time based access
+    -- what if software license expires?
     controller todo.assignee can
       AssignTodo_Start : ContractId AssignedTodo
         with

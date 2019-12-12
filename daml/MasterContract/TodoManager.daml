@@ -11,6 +11,11 @@ template TodoManager
     operator : Party
     client : Party
   where
+    -- again, this prevents anyone from creating this since
+    -- both sigs must be captured somewhere to create this in the first place
+    -- and we enfore they cant be the same to avoid loop holes...
+    -- The only way you can create this contract is via AcmeTodoMaster contracts whcih
+    -- hardcode the operatoe to Acme but allow Acme to specifiy client!
     signatory operator, client
 
     ensure operator /= client

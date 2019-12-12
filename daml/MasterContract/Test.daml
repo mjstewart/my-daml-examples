@@ -58,7 +58,7 @@ flow = scenario do
   acme_alice_relationship <- submit alice do
     exercise acme_alice_access_request AppAccessRequest_Accept
 
-  submit alice do
+  bob_assign_request <- submit alice do
     exercise alice_todo_manager TodoManager_Assign with
       token = acme_alice_relationship
       todo = AssignedTodo with
@@ -68,5 +68,12 @@ flow = scenario do
         description = "mow the lawns"
         priority = High
 
+  submit bob do
+   create AssignedTodo with
+        operator = acme
+        client = alice
+        assignee = bob
+        description = "mow the lawns"
+        priority = High
 
   pure ()
