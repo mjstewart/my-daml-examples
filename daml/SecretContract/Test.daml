@@ -1,0 +1,29 @@
+daml 1.2
+module Test where
+
+import AcmeTodoMaster
+import TodoAppManager
+
+main = scenario do
+  [acme, a, aa, b] <- mapA getParty ["ACME", "A", "AA", "B"]
+
+  _acme_todo_master <- submit acme do
+    create AcmeTodoAppMaster with operator = acme
+
+ -- TODO: put a precondition on Delegating to operator = ACME
+  _delegating <- submit acme do
+    exercise _acme_todo_master AcmeTodoAppMaster_Delegator with
+      p = a
+
+  -- aa is part of company a
+  _invite_aa <- submit a do
+    exercise _delegating Delegator_Invite with
+      manager = TodoAppManager with
+        vendor = a
+        client = aa
+        appId = "TODO_APP"
+
+
+  submit aa do
+    exercise _invite_aa AcmeTodoAppInvite_Accept
+    

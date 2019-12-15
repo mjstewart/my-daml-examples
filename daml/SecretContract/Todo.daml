@@ -1,0 +1,72 @@
+daml 1.2
+module Todo where
+
+import DA.Validation
+
+data PriorityData
+ = Low
+ | Medium
+ | High
+  deriving (Show, Eq)
+
+
+
+
+template AssignTodoRequest
+  with
+    todo : AssignedTodo
+  where
+    -- more than 1 sig provides protection
+    -- this layer guards creation since op and client
+    -- must be sigs and capturing both of these must be done as part
+    -- of more than 1 step in workflow to capture the sigs
+    signatory todo.operator, todo.client
+
+    -- token adds another layer to implement time based access
+    -- what if software license expires?
+    controller todo.assignee can
+      AssignTodoRequest_Accept : ContractId AssignedTodo
+        with
+        do
+          create todo
+
+template AssignedTodo
+  with
+    operator : Party
+    client : Party
+    assignee : Party
+    description : Text
+    priority : PriorityData
+  where
+    signatory operator, client, assignee
+
+    controller assignee can
+      AssignedTodo_Start : ContractId StartedTodo
+        with
+        do
+          create StartedTodo with {..}
+
+template StartedTodo
+  with
+    operator : Party
+    client : Party
+    assignee : Party
+    description : Text
+    priority : PriorityData
+  where
+    signatory operator, client, assignee
+
+    controller assignee can
+      StartedTodo_Complete : ContractId CompletedTodo
+        do
+          create CompletedTodo with {..}
+
+template CompletedTodo
+  with
+    operator : Party
+    client : Party
+    assignee : Party
+    description : Text
+    priority : PriorityData
+  where
+    signatory operator, client, assignee
