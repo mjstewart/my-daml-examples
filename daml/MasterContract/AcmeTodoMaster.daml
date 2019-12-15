@@ -1,8 +1,13 @@
 daml 1.2
 module AcmeTodoMaster where
 
-import TodoManager
+import TodoAppManager
+import AccessToken
 
+{-
+I as ACME, want to restrict the creation of this contract to just me.
+Without this, anyone can create this contract.
+-}
 template AcmeTodoAppMaster
   with
     operator : Party
@@ -12,24 +17,42 @@ template AcmeTodoAppMaster
     ensure show operator == "'ACME'"
 
     controller operator can
+      {- I wish to invite someone to use this app, so as part of the invite
+      I include the entry point to the TodoApp which kicks off all the main
+      workflows. The 'Invite' request includes this to show the client
+      what they are actually 'giving their acceptance to'
+      -}
       nonconsuming
         AcmeTodoAppMaster_Invite : ContractId AcmeTodoAppInvite
           with
-            manager : TodoManager
+            manager : TodoAppManager
+            token : AccessToken
           do
             -- create an invitation accept expiry time ?
-            create AcmeTodoAppInvite with manager
+            create AcmeTodoAppInvite with manager; token
 
 template AcmeTodoAppInvite
   with
-    -- this is what the client is needing to begin interacting with the TodoApp
-    manager : TodoManager
+    manager : TodoAppManager
+    token : AccessToken
   where
-    signatory manager.operator
+    signatory manager.vendor
 
-    ensure show manager.operator == "'ACME'"
+    ensure show manager.vendor == "'ACME'"
+
+    agreement "ACME is the only party who can invite others to use"
+      <> "their app. This prevents anyone from creating this contract"
 
     controller manager.client can
-      AcmeTodoAppInvite_Accept : ContractId TodoManager
+      {- Once the client accepts, we have captured both the operator and client
+      signatories which is what the TodoAppManager requires.
+      The key point here is that there is no way to create a TodoAppManager
+      with an operator being anyone due to the ensure statement in both
+      the AcmeTodoAppMaster/Invite contracts. Every contract involved in
+      the TodoApp will at a minimum have the operator ACME enforced.
+      -}
+      AcmeTodoAppInvite_Accept : (ContractId TodoAppManager, ContractId AccessToken)
         do
-          create manager
+          manager_cid <- create manager
+          access_cid <- create token
+          pure (manager_cid, access_cid)

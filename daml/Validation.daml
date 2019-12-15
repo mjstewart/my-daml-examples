@@ -1,0 +1,60 @@
+daml 1.2
+module Validation where
+
+import DA.Validation
+import DA.Text
+
+data User = User with
+  name : Text
+  age : Int
+  email : Text
+ deriving (Show, Eq)
+
+validateName : Text -> Validation Text Text
+validateName name =
+  if isPrefixOf "a" name then
+    ok name
+  else
+    invalid $ name <> " does not start with 'a'"
+
+validateAge : Int -> Validation Text Int
+validateAge age =
+  if age < 18 then
+    invalid $ "user must be over 18, got: " <> show age
+  else ok age
+
+validateEmail : Text -> Validation Text Text
+validateEmail email =
+  if Prelude.length (splitOn "@" email) <= 1 then
+    invalid $ "email missing @"
+  else ok email
+
+validateUser (name : Text) (age : Int) (email : Text) =
+  pure User <*> validateName name <*> validateAge age <*> validateEmail email
+
+
+-- or pass in a pending User and if Valid will return it
+
+validateName2 : User -> Validation Text Text
+validateName2 user =
+  validateName user.name
+
+validateAge2 : User -> Validation Text Int
+validateAge2 user =
+  validateAge user.age
+
+validateEmail2 : User -> Validation Text Text
+validateEmail2 user =
+  validateEmail user.email
+
+validateUser2 : User -> Validation Text User
+validateUser2 user =
+  pure User <*> validateName2 user <*> validateAge2 user <*> validateEmail2 user
+
+test = scenario do
+  let
+    userInvalid = User with name = "bapple"; age = 17; email = "apple.me.com"
+    userValid = User with name = "apple"; age = 18; email = "apple@me.com"
+
+  -- pure $ validateUser user.name user.age user.email
+  pure $ validateUser2 userValid

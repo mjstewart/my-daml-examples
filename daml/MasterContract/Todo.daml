@@ -1,7 +1,8 @@
 daml 1.2
 module Todo where
 
-import VendorClientRelationship
+import AccessToken
+import DA.Validation
 
 data PriorityData
  = Low
@@ -10,10 +11,13 @@ data PriorityData
   deriving (Show, Eq)
 
 
+
+
 template AssignTodoRequest
   with
     todo : AssignedTodo
   where
+    -- more than 1 sig provides protection
     -- this layer guards creation since op and client
     -- must be sigs and capturing both of these must be done as part
     -- of more than 1 step in workflow to capture the sigs
@@ -22,9 +26,9 @@ template AssignTodoRequest
     -- token adds another layer to implement time based access
     -- what if software license expires?
     controller todo.assignee can
-      AssignTodo_Start : ContractId AssignedTodo
+      AssignTodoRequest_Accept : ContractId AssignedTodo
         with
-          token : VendorClientRelationship
+          _token : ContractId AccessToken
         do
           create todo
 
@@ -41,7 +45,7 @@ template AssignedTodo
     controller assignee can
       AssignedTodo_Start : ContractId StartedTodo
         with
-          token : VendorClientRelationship
+          _token : ContractId AccessToken
         do
           create StartedTodo with {..}
 

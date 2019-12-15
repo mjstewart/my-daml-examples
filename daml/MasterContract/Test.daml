@@ -2,78 +2,118 @@ daml 1.2
 module Test where
 
 import AcmeTodoMaster
-import TodoManager
+import TodoAppManager
 import Todo
-import VendorClientRelationship
+import AccessToken
 import DA.Time
 
+describe : Text -> Scenario a -> Scenario a
+describe msg = scenario
+
+t1 = describe (
+    "Should not be able to create random contracts" <>
+    "without going through the master contracts" ) do
+  pure ()
+
 flow = scenario do
-  [acme, alice, bob, rogue] <- mapA getParty ["ACME", "alice", "bob", "rogue"]
+  [acme, acmeClient, bob, rogue] <- mapA getParty ["ACME", "AcmeClient", "bob", "rogue"]
+  now <- getTime
 
-  submitMustFail rogue do
-    create AcmeTodoAppMaster with operator = rogue
-
-  master <- submit acme do
+  _acme_master <- submit acme do
     create AcmeTodoAppMaster with operator = acme
 
-  master_invite_alice <- submit acme do
-    exercise master AcmeTodoAppMaster_Invite with
-      manager = TodoManager with
-        operator = acme
-        client = alice
-
-
-  alice_todo_manager <- submit alice do
-    exercise master_invite_alice AcmeTodoAppInvite_Accept
-
-  -- You cant just go ahead and create TodoManager since it will
-  -- fail without auto from ACME in this case
-  submitMustFail alice do
-    create TodoManager with
-      operator = acme
-      client = alice
-
-  -- same as above since all 3 people need signatory
-  submitMustFail alice do
-    create AssignedTodo with
-      operator = acme
-      client = alice
-      assignee = bob
-      description = "mow the lawns"
-      priority = High
-
-  now <- pass (minutes 1)
-  future <- pass (minutes 2)
-
-  acme_alice_access_request <- submit acme do
-    create AppAccessRequest with
-      relationship = VendorClientRelationship with
+  _master_invite_client <- submit acme do
+    exercise _acme_master AcmeTodoAppMaster_Invite with
+      manager = TodoAppManager with
         vendor = acme
-        client = alice
+        client = acmeClient
+        appId = "TODO_APP"
+      token = AccessToken with
+        vendor = acme
+        client = acmeClient
         effectiveFrom = now
-        effectiveTo = Some future
-        identifier = "acme_alice_todoapp"
-        description = "ACME permits alice access to the Todo App"
+        effectiveTo = None
+        appId = "ACME_TODO_APP"
+        description = "ACME INC grants access to AcmeClient given the supplied time span"
 
-  acme_alice_relationship <- submit alice do
-    exercise acme_alice_access_request AppAccessRequest_Accept
+  (_manager, _token) <- submit acmeClient do
+    exercise _master_invite_client AcmeTodoAppInvite_Accept
 
-  bob_assign_request <- submit alice do
-    exercise alice_todo_manager TodoManager_Assign with
-      token = acme_alice_relationship
+  assign_bob_request <- submit acmeClient do
+    exercise _manager TodoAppManager_Assign with
+      -- _token
       todo = AssignedTodo with
         operator = acme
-        client = alice
+        client = acmeClient
         assignee = bob
-        description = "mow the lawns"
+        description = "mow the lawn"
         priority = High
 
+  assigned_todo_bob <- submit bob do
+    exercise assign_bob_request AssignTodoRequest_Accept with _token
+
   submit bob do
-   create AssignedTodo with
+    exercise assigned_todo_bob AssignedTodo_Start with _token
+
+
+
+  -- i cant just assign todos to anyone, you must go through the work flow to create
+  -- assign todos in order to capture the signatories properly. this is built in defense.
+  -- There is no way anyone can capture these signatories because they cant just randomly
+  -- invent dummy contracts to step through a propose / accept pattern to capture the sigs!
+  submitMustFail acme do
+    create AssignedTodo with
         operator = acme
-        client = alice
+        client = acmeClient
         assignee = bob
-        description = "mow the lawns"
+        description = "mow the lawn"
         priority = High
+
+
+
+
+
+  -- -- same as above since all 3 people need signatory
+  -- submitMustFail alice do
+    -- create AssignedTodo with
+      -- operator = acme
+      -- client = alice
+      -- assignee = bob
+      -- description = "mow the lawns"
+      -- priority = High
+
+  -- now <- pass (minutes 1)
+  -- future <- pass (minutes 2)
+
+  -- acme_alice_access_request <- submit acme do
+    -- create AppAccessRequest with
+      -- relationship = AccessToken with
+        -- vendor = acme
+        -- client = alice
+        -- effectiveFrom = now
+        -- effectiveTo = Some future
+        -- appId = "acme_alice_todoapp"
+        -- description = "ACME permits alice access to the Todo App"
+
+  -- acme_alice_relationship <- submit alice do
+    -- exercise acme_alice_access_request AppAccessRequest_Accept
+
+  -- bob_assign_request <- submit alice do
+    -- exercise alice_todo_manager TodoManager_Assign with
+      -- token = acme_alice_relationship
+      -- todo = AssignedTodo with
+        -- operator = acme
+        -- client = alice
+        -- assignee = bob
+        -- description = "mow the lawns"
+        -- priority = High
+
+  -- submit bob do
+   -- create AssignedTodo with
+        -- operator = acme
+        -- client = alice
+        -- assignee = bob
+        -- description = "mow the lawns"
+        -- priority = High
 
   pure ()

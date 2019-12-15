@@ -1,20 +1,157 @@
 daml 1.2
 module Auth where
 
-import VendorClientRelationship
+import DA.Validation
+import DA.Record
+import qualified DA.Traversable as T
+import AccessToken
 
-data AuthRequestData = AuthRequestData with
-  vendor : Party
-  client : Party
-  now : Time
+fmap2 : (Functor f, Functor g) => (a -> b) -> f (g a) -> f (g b)
+fmap2 = fmap . fmap
 
--- Potentiall return Validation type and accumulate specific reasons of why
-isPermitted :
-  AuthRequestData
-  -> VendorClientRelationship
-  -> Bool
-isPermitted req relationship =
-  req.vendor == relationship.vendor &&
-  req.client == relationship.client &&
-  req.now >= relationship.effectiveFrom &&
-  req.now <= optional req.now identity relationship.effectiveTo
+lookupAndFetch : (Template t) =>
+  Update (Optional (ContractId t))
+  -> Update (Optional t)
+lookupAndFetch lookup = do
+  x <- lookup
+  case x of
+    None -> pure None
+    Some y -> Some <$> fetch y
+
+
+lookupAndFetch2 : (Template t) =>
+  Update (Optional (ContractId t))
+  -> Update (Optional t)
+lookupAndFetch2 lookup =
+  join $ T.sequence <$> fmap2 fetch lookup
+
+{-
+I am thinking something like this could work.
+
+Any template that has 3 fields (whatever fields correspond to
+the key that makes up the AccessToken)
+
+no choices will need to be passed on an AccessToken as argument.
+instead each choice you want guarded by this access token will
+register instance of typeclass
+-}
+
+errorMsg : Text -> Text
+errorMsg = ("AccessToken: " <>)
+
+-- validateAccessToken :
+  -- (Template t, Choice t c r, HasTokenValidation t c r) =>
+
+  -- -> Update (Validation Text AccessTokenKey)
+-- validateAccessToken t = pure $ invalid ""
+
+
+
+-- HasField operator, client (whatever is in the token to verify)
+-- perhaps refactor later to enforce AccessTokenKey exists in each contract
+-- instead
+class (
+  Template t,
+  HasField "vendor" t Party,
+  HasField "client" t Party,
+  HasField "appId" t Text,
+  Choice t c r)
+  => HasTokenValidation t c r where
+
+  -- will return the validated AccessTokenKey if its valid..
+  check : t -> c -> Update (Validation Text AccessTokenKey)
+  -- check : t -> c -> Update r
+
+  default check : t -> c -> Update (Validation Text AccessTokenKey)
+  -- check : t -> c -> Update r
+  check current c = do
+    -- current <- fetch cid
+
+
+    maybeToken <- lookupAndFetch2 $ lookupByKey @AccessToken AccessTokenKey with
+      vendor = current.vendor
+      client = current.client
+      appId = "TODO_APP"
+
+    now <- getTime
+
+    -- ideally use assertMsg or abort if there are validation results
+    -- so the caller can just invoke this function and if it doesnt fail its good.
+    pure $ case maybeToken of
+      None -> invalid "no access token found"
+      (Some token) ->
+        AccessTokenKey
+              <$> checkVendor (Proxy current) token
+              <*> checkClient (Proxy current) token
+              <*> checkAppId (Proxy current) token
+              <* checkTime now token
+
+
+
+
+  -- check : ContractId t -> c -> Update (Validation Text AccessTokenKey)
+  -- -- will return the validated AccessTokenKey if its valid..
+  -- default check : ContractId t -> c -> Update (Validation Text AccessTokenKey)
+  -- check cid c = do
+    -- current <- fetch cid
+
+    -- maybeToken <- lookupAndFetch2 $ lookupByKey @AccessToken AccessTokenKey with
+      -- vendor = current.vendor
+      -- client = current.client
+      -- appId = "TODO_APP"
+
+    -- now <- getTime
+
+    -- pure $ case maybeToken of
+      -- None -> invalid "no access token found"
+      -- (Some token) ->
+        -- AccessTokenKey
+              -- <$> checkVendor (Proxy current) token
+              -- <*> checkClient (Proxy current) token
+              -- <*> checkAppId (Proxy current) token
+              -- <* checkTime now token
+
+------ new
+
+-- Need this dummy type to enable Template t to be used in function arg
+-- rather than a constraint.
+data Proxy t = Proxy t
+
+validateEq : Eq a => Text -> a -> a -> Validation Text a
+validateEq field a b =
+  if a == b then ok a
+  else invalid $ errorMsg $ field <> " mismatch"
+
+checkVendor :
+  (Template t, HasField "vendor" t Party) =>
+  Proxy t
+  -> AccessToken
+  -> Validation Text Party
+checkVendor (Proxy a) b =
+  validateEq "vendor" a.vendor b.vendor
+
+checkClient :
+  (Template t, HasField "client" t Party) =>
+  Proxy t
+  -> AccessToken
+  -> Validation Text Party
+checkClient (Proxy a) b =
+  validateEq "client" a.client b.client
+
+checkAppId :
+  (Template t, HasField "appId" t Text) =>
+  Proxy t
+  -> AccessToken
+  -> Validation Text Text
+checkAppId (Proxy a) b =
+  validateEq "appId" a.appId b.appId
+
+checkTime :
+  Time
+  -> AccessToken
+  -> Validation Text Time
+checkTime now token =
+  if now >= token.effectiveFrom &&
+     now <= optional now identity token.effectiveTo
+  then ok now
+  else invalid $ errorMsg "current time is outside of allowed time span"

@@ -1,0 +1,104 @@
+daml 1.2
+module AccessTokenOld where
+
+import DA.Validation
+
+---- old, dont use...
+data AuthRequestData = AuthRequestData with
+  vendor : Party
+  client : Party
+  appId : Text
+  now : Time
+    deriving (Show, Eq)
+
+errorMsg : Text -> Text
+errorMsg = ("AccessToken: " <>)
+
+checkVendorOld :
+  AuthRequestData
+  -> AccessToken
+  -> Validation Text Party
+checkVendorOld req rship =
+  if req.vendor == rship.vendor then ok req.vendor
+  else invalid $ errorMsg "vendor mismatch"
+
+checkClientOld :
+  AuthRequestData
+  -> AccessToken
+  -> Validation Text Party
+checkClientOld req rship =
+  if req.client == rship.client then ok req.client
+  else invalid $ errorMsg "client mismatch"
+
+checkAppIdOld :
+  AuthRequestData
+  -> AccessToken
+  -> Validation Text Text
+checkAppIdOld req rship =
+  if req.appId == rship.appId then ok req.appId
+  else invalid $ errorMsg "app id mismatch"
+
+checkTimeOld :
+  AuthRequestData
+  -> AccessToken
+  -> Validation Text Time
+checkTimeOld req rship =
+  if req.now >= rship.effectiveFrom &&
+     req.now <= optional req.now identity rship.effectiveTo
+  then ok req.now
+  else invalid $ errorMsg "current time is outside of allowed time span"
+
+validateRequest :
+  AuthRequestData
+  -> AccessToken
+  -> Validation Text AuthRequestData
+validateRequest req rship =
+  pure AuthRequestData
+  <*> checkClientOld req rship
+  <*> checkVendorOld req rship
+  <*> checkAppIdOld req rship
+  <*> checkTimeOld req rship
+
+data AccessTokenKey = AccessTokenKey with
+  vendor : Party
+  client : Party
+  appId : Text
+   deriving (Show, Eq)
+
+template AccessToken
+  with
+    vendor : Party
+    client : Party
+    appId : Text
+    effectiveFrom : Time
+    effectiveTo : Optional Time
+    description : Text
+  where
+    signatory vendor, client
+
+    key AccessTokenKey with
+      vendor
+      client
+      appId
+     : AccessTokenKey
+    maintainer key.client
+
+    controller client can
+      AccessToken_Validate : Validation Text AuthRequestData
+        with
+          request : AuthRequestData
+        do
+          pure $ validateRequest request this
+
+
+
+template AppAccessRequest
+  with
+    relationship : AccessToken
+  where
+    signatory relationship.vendor
+
+    controller relationship.client can
+      AppAccessRequest_Accept : ContractId AccessToken
+        do
+          create relationship

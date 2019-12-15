@@ -1,0 +1,22 @@
+daml 1.2
+module AuthInstances where
+
+import Auth
+import TodoAppManager
+import Todo
+import DA.Validation
+import AccessToken
+
+instance Choice
+  TodoAppManager
+  TodoAppManager_Test
+  (Validation Text AccessTokenKey) where
+
+  exercise man c =
+    check man c
+
+instance HasTokenValidation
+  TodoAppManager
+  TodoAppManager_Test
+  (Validation Text AccessTokenKey)
+  -- (ContractId AssignTodoRequest)

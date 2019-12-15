@@ -1,0 +1,62 @@
+daml 1.2
+module TodoAppManager where
+
+import Todo
+import AccessToken
+import Auth
+import DA.Validation
+
+v : (HasTokenValidation TodoAppManager TodoAppManager_Test (Validation Text AccessTokenKey)) =>
+  TodoAppManager
+  -> TodoAppManager_Test
+  -> Update (Validation Text AccessTokenKey)
+v t c =
+  check t c
+
+-- Any 2 parties can create the entry point to the TodoApp, but require both sigs of each party.
+-- these can be anything, its not until you try execute choices ia an actual AccessToken
+-- used to ensure the operator and client pair make sense.
+template TodoAppManager
+  with
+    vendor : Party
+    client : Party
+    appId : Text
+  where
+    -- again, this prevents anyone from creating this since
+    -- both sigs must be captured somewhere to create this in the first place
+    -- and we enfore they cant be the same to avoid loop holes...
+    -- The only way you can create this contract is via AcmeTodoMaster contracts whcih
+    -- hardcode the operatoe to Acme but allow Acme to specifiy client!
+    signatory vendor, client
+
+    ensure vendor /= client
+
+    controller client can
+      TodoAppManager_Test : Validation Text AccessTokenKey
+        do
+          pure $ invalid ""
+
+      nonconsuming
+        TodoAppManager_Assign : ContractId AssignTodoRequest
+          with
+            -- _token : ContractId AccessToken
+            todo : AssignedTodo
+          do
+
+            -- res <- check p TodoAppManager_Assign todo
+
+
+            -- token <- fetch _token
+            -- now <- getTime
+
+            -- let
+              -- validation =
+                -- exercise _token AccessToken_Validate
+                  -- with
+                    -- request = AuthRequestData with
+                      -- vendor = operator
+                      -- client
+                      -- appId = "TODO_APP"
+                      -- now
+
+            create AssignTodoRequest with todo

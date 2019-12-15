@@ -1,0 +1,26 @@
+daml 1.2
+module AccessToken where
+
+data AccessTokenKey = AccessTokenKey with
+  vendor : Party
+  client : Party
+  appId : Text
+   deriving (Show, Eq)
+
+template AccessToken
+  with
+    vendor : Party
+    client : Party
+    appId : Text
+    effectiveFrom : Time
+    effectiveTo : Optional Time
+    description : Text
+  where
+    signatory vendor, client
+
+    key AccessTokenKey with
+      vendor
+      client
+      appId
+     : AccessTokenKey
+    maintainer key.client
