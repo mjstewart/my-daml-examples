@@ -1,0 +1,89 @@
+daml 1.2
+
+module ChristmasParty where
+
+{- I want to gain the attendees acceptance without them seeing private data of the
+ChristmanParty.
+
+DAML's privacy model is close to row based access in RDBMS.
+If you follow the analogy that
+templates = table
+contracts are rows in that table
+
+then this pattern makes sense.
+
+You'd typically store attendees in an attendees table in a 1 to many relationship.
+
+ChristmasParty has 1 or many Attendees.
+
+There is a little bit of gymnastics to make this work in DAML,
+but basically the ChristmasPartyAttendee template = The Attendees table, and an instance
+of this contract represents a row in this table. I guess you can then think of it as
+the owner is a FK linking back to the ChristmasParty table which maintains a list like
+hibernate ORM would model a 1 to many.
+-}
+template ChristmasPartyInvite
+  with
+    owner : Party
+    attendee : Party
+    -- I want to hide the attendees list from them, like a blind accept kind of thing.
+  where
+    signatory owner
+
+    controller attendee can
+      -- How could I do this differently without creating another contract?
+      ChristmasPartyInvite_Accept : ContractId ChristmasPartyAttendee
+        do
+          create ChristmasPartyAttendee with ..
+
+
+template ChristmasPartyAttendee
+  with
+    owner : Party
+    attendee : Party
+  where
+    signatory owner, attendee
+
+    controller owner can
+      ChristmasPartyInviteResult_AddAttendee : ContractId ChristmasParty
+        with
+          _xmas_party : ContractId ChristmasParty
+        do
+          exercise _xmas_party $ ChristmasParty_AddAttendee attendee
+
+template ChristmasParty
+  with
+    owner : Party
+    attendees : [Party]
+  where
+    signatory owner
+
+    controller owner can
+      nonconsuming
+        ChristmasParty_Invite : ContractId ChristmasPartyInvite
+          with
+            attendee : Party
+          do
+            create ChristmasPartyInvite with ..
+
+    controller owner can
+      ChristmasParty_AddAttendee : ContractId ChristmasParty
+        with
+          attendee : Party
+        do
+          assertMsg (show attendee <> " is already an attendee!") $ attendee `notElem` attendees
+          create this with attendees = attendee :: attendees
+
+t = scenario do
+  [owner, attendee] <- mapA getParty ["Owner", "AttendeeA"]
+  _xmas_party <- submit owner do
+    create ChristmasParty with owner; attendees = []
+  -- owner invites attendee to the xmas partry
+  _invite_request <- submit owner do
+    exercise _xmas_party ChristmasParty_Invite with ..
+  -- the attendee accepts
+  _invite_result <- submit attendee do
+    exercise _invite_request ChristmasPartyInvite_Accept
+  -- but the owner still needs to manually commit the change
+  submit owner do
+    exercise _invite_result ChristmasPartyInviteResult_AddAttendee with ..

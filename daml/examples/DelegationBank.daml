@@ -1,0 +1,76 @@
+daml 1.2
+module DelegationBank where
+
+
+template JointBankAccount
+  with
+    a : Party
+    b : Party
+    c : Party
+  where
+    signatory c
+
+    {- to capture BOTH signatories at the same time we need to introduce
+    delegation with propose/accept to capture sigs. Basically I want to say that
+    'a', will delegate acceptance is fine when 'b' gives their acceptance.
+    -}
+    controller a, b can
+      JointBankAccount_CreatePurchaseAgreement : ContractId PurchaseAgreement
+        do
+          create PurchaseAgreement with ..
+
+template PurchaseAgreement
+  with
+    a : Party
+    b : Party
+  where
+    signatory a, b
+
+-- This sets up to capture 'a' delegating its signatory / acceptance to 'b'.
+-- 'b' has a choice with 'a' as the sig.
+template DelegatingPurchaseProposal
+  with
+    a : Party
+    b : Party
+  where
+    signatory a
+
+    controller b can
+      DelegatingPurchaseProposal_Propose : ContractId DelegatingPurchase
+        do
+          create DelegatingPurchase with ..
+
+
+template DelegatingPurchase
+  with
+    a : Party
+    b : Party
+  where
+    signatory a, b
+
+    -- because both a and b are sigs, we can now exercise the conjunction choice
+    -- in the JointBankAccount.
+    controller b can
+      DelegatingPurchase_Create : ContractId PurchaseAgreement
+        with
+          _joint_bank : ContractId JointBankAccount
+        do
+          exercise _joint_bank JointBankAccount_CreatePurchaseAgreement
+
+
+
+
+test = scenario do
+  [a, b, c] <- mapA getParty ["A", "B", "C"]
+
+  _joint_bank <- submit c do create JointBankAccount with ..
+
+  _delegate_proposal <- submit a do
+    create DelegatingPurchaseProposal with ..
+
+  _delegate_purchase <- submit b do
+    exercise _delegate_proposal DelegatingPurchaseProposal_Propose
+
+  submit b do
+    exercise _delegate_purchase DelegatingPurchase_Create with ..
+

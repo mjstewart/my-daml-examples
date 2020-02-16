@@ -1,0 +1,28 @@
+daml 1.2
+module PublicApiMaster where
+
+import Response
+import SomeAction
+
+template PublicApiMaster
+  with
+    owner : Party
+  where
+    signatory owner
+
+    key owner : Party
+    maintainer key
+
+    controller owner can
+      nonconsuming PublicApiMaster_Response : ContractId Response
+        with
+          message : Text
+        do
+          create Response with ..
+
+    controller owner can
+      nonconsuming PublicApiMaster_SomeAction : ContractId SomeAction
+        with
+          message : Text
+        do
+          create SomeAction with ..

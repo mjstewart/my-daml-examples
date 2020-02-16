@@ -1,0 +1,9 @@
+daml 1.2
+module SomeAction where
+
+template SomeAction
+  with
+    owner : Party
+    message : Text
+  where
+    signatory owner

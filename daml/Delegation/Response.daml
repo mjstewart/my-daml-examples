@@ -1,0 +1,10 @@
+daml 1.2
+module Response where
+
+template Response
+  with
+    owner : Party
+    message : Text
+  where
+    signatory owner
+

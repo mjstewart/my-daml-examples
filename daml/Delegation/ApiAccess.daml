@@ -1,0 +1,10 @@
+daml 1.2
+module ApiAccess where
+
+
+template ApiAccess
+  with
+    owner : Party
+  where
+    signatory owner
+

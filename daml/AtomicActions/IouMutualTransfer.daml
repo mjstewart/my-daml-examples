@@ -1,0 +1,125 @@
+daml 1.2
+module IouMutualTransfer where
+
+template Iou
+  with
+    issuer : Party
+    owner : Party
+    amount : Decimal
+  where
+    signatory issuer, owner
+
+    controller owner can
+      Iou_Transfer : ContractId IouTransferProposal
+        with
+          newOwner : Party
+        do
+          assertMsg "cant transfer to self" $ owner /= newOwner
+          create IouTransferProposal with
+            iou = this
+            newOwner
+
+
+    choice Iou_MutualTransfer
+      : ContractId Iou
+      with
+       newOwner : Party
+     controller owner, newOwner
+        do
+          create this with
+            owner = newOwner
+
+
+template IouTransferProposal
+  with
+    iou : Iou
+    newOwner : Party
+  where
+    signatory (signatory iou)
+
+    controller newOwner can
+      IouTransferProposal_Accept : ContractId Iou
+        do
+          create iou with
+            owner = newOwner
+
+
+template IouProposal
+  with
+    iou : Iou
+  where
+    signatory iou.issuer
+
+    controller iou.owner can
+      IouProposal_Accept : ContractId Iou
+        do
+          create iou
+
+
+template IouSender
+  with
+    sender : Party
+    receiver : Party
+  where
+    signatory receiver
+
+    controller sender can
+      nonconsuming
+        IouSender_SendIou : ContractId Iou
+          with
+            _iou : ContractId Iou
+          do
+            iou <- fetch _iou
+            assert $ iou.amount > 0.0
+            exercise _iou Iou_MutualTransfer with
+              newOwner = receiver
+
+
+mutual_transfer_test = scenario do
+  [alice, bob, charlie] <- mapA getParty ["Alice", "Bob", "Charlie"]
+
+  _prop <- submit alice do
+    create IouProposal with
+      iou = Iou with
+        issuer = alice
+        owner = bob
+        amount = 100.0
+
+  _iou <- submit bob do
+    exercise _prop IouProposal_Accept
+
+  -- bob is saying its fine for alice to send iou
+  _sender <- submit bob do
+    create IouSender with
+      sender = alice
+      receiver = bob
+
+  submit alice do
+    exercise _sender IouSender_SendIou with
+      _iou
+
+  pure ()
+
+
+
+
+test = scenario do
+  [alice, bob, charlie] <- mapA getParty ["Alice", "Bob", "Charlie"]
+
+  _prop <- submit alice do
+    create IouProposal with
+      iou = Iou with
+        issuer = alice
+        owner = bob
+        amount = 100.0
+
+  _iou <- submit bob do
+    exercise _prop IouProposal_Accept
+
+  _transfer <- submit bob do
+    exercise _iou Iou_Transfer with newOwner = charlie
+
+  submit charlie do
+    exercise _transfer IouTransferProposal_Accept
+
+  pure ()

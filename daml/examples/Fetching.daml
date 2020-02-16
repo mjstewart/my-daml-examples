@@ -1,0 +1,104 @@
+daml 1.2
+module Fetching where
+
+
+template Lunch
+  with
+    owner : Party
+    id : Text
+    attendees : [Party]
+  where
+    signatory owner
+
+    key (owner, id) : (Party, Text)
+    maintainer key._1
+
+    controller owner can
+      Lunch_Invite : ContractId LunchInvite
+        with
+          invite : LunchInvite
+        do
+          create invite
+
+template LunchInvite
+  with
+    owner : Party
+    id : Text
+    attendee : Party
+  where
+    signatory owner
+
+    controller owner can
+      LunchInvite_Set : ContractId Counter
+        with
+          nn : Int
+        do
+          (cid, t) <- fetchByKey @Counter (owner, "CC")
+          exercise cid $ Counter_Set nn
+
+          -- create t with n = nn
+
+    controller owner can
+      LunchInvite_Test : ContractId Lunch
+        do
+          (cid, _) <- fetchByKey @Lunch (owner, id)
+          pure cid
+
+
+    controller attendee can
+      LunchInvite_Accept : ContractId Lunch
+        do
+          (cid, _) <- fetchByKey @Lunch (owner, id)
+          pure cid
+
+
+template Counter
+  with
+    owner : Party
+    id : Text
+    n : Int
+  where
+    signatory owner
+
+    key (owner, id) : (Party, Text)
+    maintainer key._1
+
+    controller owner can
+      Counter_Inc : ContractId Counter
+        do
+          create this with n = n + 1
+
+      Counter_Set : ContractId Counter
+        with
+          val : Int
+        do
+          create this with n = val
+
+test = scenario do
+  [a, b] <- mapA getParty ["A", "B"]
+
+  _lunch <- submit a do
+    create Lunch with
+      owner = a
+      id = "2019"
+      attendees = []
+
+  submit b do
+    fetchByKey @Lunch (a, "2019")
+
+  -- _invite <- submit a do
+    -- exercise _lunch Lunch_Invite with
+      -- invite = LunchInvite with
+        -- owner = a
+        -- id = "2019"
+        -- attendee = b
+
+  -- _counter <- submit a do
+    -- create Counter with owner = a; id = "CC"; n = 0
+
+  -- submit a do
+    -- exercise _invite LunchInvite_Set with nn = 243
+
+
+  -- (_counter, _) <- submit a do
+    -- fetchByKey @Counter (a, "CC")

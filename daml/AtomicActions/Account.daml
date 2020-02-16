@@ -1,0 +1,202 @@
+daml 1.2
+module Account where
+
+template MasterAccount
+  with
+    owner : Party
+    bank : Text
+    observers : [Party]
+  where
+    signatory owner
+    observer observers
+
+    key (owner, bank) : (Party, Text)
+    maintainer key._1
+
+    controller owner can
+      MasterAccount_Transfer : ContractId MoneyTransferRequest
+        with
+          fromAccountKey : AccountKey
+          toAccountKey : AccountKey
+          delta : Decimal
+        do
+          -- lookup first if none report error message
+          (_, token) <- fetchByKey @BalanceTransferToken (owner, toAccountKey.owner)
+
+          exerciseByKey @Account fromAccountKey $ Account_ApplyDelta delta
+
+          create MoneyTransferRequest with
+            sender = owner
+            receiver = toAccountKey.owner
+            accountKey = toAccountKey
+            delta
+
+
+data AccountKey = AccountKey with
+  owner : Party
+  id : Text
+  bank : Text
+    deriving (Show, Eq)
+
+template Account
+  with
+    owner : Party
+    id : Text
+    bank : Text
+    amount : Decimal
+    observers : [Party]
+  where
+    signatory owner
+    observer observers
+
+    key AccountKey with .. : AccountKey
+    maintainer key.owner
+
+    controller owner can
+      Account_ApplyDelta : ContractId Account
+        with
+          delta : Decimal
+        do
+          create this with amount = amount + delta
+
+
+template BalanceTransferTokenProposal
+  with
+    rship : BalanceTransferToken
+  where
+    signatory rship.sender
+
+    controller rship.receiver can
+      BalanceTransferTokenProposal_Accept : ContractId BalanceTransferToken
+        do
+          create rship
+
+template BalanceTransferToken
+  with
+    sender : Party
+    receiver : Party
+  where
+    signatory sender, receiver
+
+    key (sender, receiver) : (Party, Party)
+    maintainer key._1
+
+
+template MoneyTransferSender
+  with
+    sender : Party
+    receiver : Party
+  where
+    signatory receiver
+
+    controller sender can
+      nonconsuming MoneyTransferSender_Send : ()
+        with
+          accountKey : AccountKey
+          delta : Decimal
+        do
+
+          pure ()
+
+
+
+
+
+template MoneyTransferRequest
+  with
+    sender : Party
+    receiver : Party
+    accountKey : AccountKey
+    delta : Decimal
+  where
+    signatory sender
+
+    controller receiver can
+      MoneyTransferRequest_Accept : ()
+        do
+          -- lookup first if none report error message
+          (_, token) <- fetchByKey @BalanceTransferToken (sender, receiver)
+
+          exerciseByKey @Account accountKey $ Account_ApplyDelta delta
+          pure ()
+
+
+test = scenario do
+  [alice, bob] <- mapA getParty ["Alice", "Bob"]
+
+  _aliceMaster <- submit alice do
+    create MasterAccount with
+      owner = alice
+      bank = "A"
+      observers = []
+
+  -- _bobMaster <- submit bob do
+    -- create MasterAccount with
+      -- owner = bob
+      -- bank = "A"
+      -- observers = [alice]
+
+  _aliceAccount <- submit alice do
+    create Account with owner = alice; bank = "A"; id = "1"; amount = 100.0; observers = []
+
+  _bobAccount <- submit bob do
+    create Account with owner = bob; bank = "A"; id = "2"; amount = 200.0; observers = []
+
+  -- make it bidirectional? partyA / B rather then sender/receiver
+  _transferTokenProp <- submit alice do
+    create BalanceTransferTokenProposal with
+      rship = BalanceTransferToken with
+        sender = alice
+        receiver = bob
+
+  _transferToken <- submit bob do
+    exercise _transferTokenProp BalanceTransferTokenProposal_Accept
+
+  _request <- submit alice do
+    exercise _aliceMaster MasterAccount_Transfer with
+     fromAccountKey = AccountKey alice "1" "A"
+     toAccountKey = AccountKey bob "2" "A"
+     delta = 30.0
+
+  submit bob do
+    exercise _request MoneyTransferRequest_Accept
+
+
+  -- _bobGrantsAliceSendAccess <- submit bob do
+    -- create MoneyTransferSender with
+      -- sender = alice
+      -- receiver = bob
+
+  -- _aliceGrantsBobSendAccess <- submit alice do
+    -- create MoneyTransferSender with
+      -- sender = bob
+      -- receiver = alice
+
+
+  -- bob must submit
+  -- _t1 <- submit alice do
+    -- create MoneyTransferRequest with
+      -- sender = alice
+      -- receiver = bob
+      -- accountKey = AccountKey bob "2" "A"
+      -- delta = 30.0
+
+  -- _t2 <- submit bob do
+    -- create MoneyTransferRequest with
+      -- sender = bob
+      -- receiver = alice
+      -- accountKey = AccountKey alice "1" "A"
+      -- delta = 30.0
+
+  -- _t <- submit alice do
+    -- create Transfer with
+      -- sender = alice
+      -- receiver = bob
+      -- _t1
+      -- _t2
+
+  -- submit bob do
+    -- exercise _t Transfer_Accept with _rship
+
+
+  pure ()

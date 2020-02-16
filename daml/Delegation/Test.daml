@@ -1,0 +1,32 @@
+daml 1.2
+module Test where
+
+import PublicApiMaster
+import ApiAccess
+import Response
+
+import TransferResponseProposal
+import TransferResponse
+
+test = scenario do
+  [ownerA, ownerB, ownerC] <- mapA getParty ["OwnerA", "OwnerB", "OwnerC"]
+
+  _apiA <- submit ownerA do
+    create PublicApiMaster with owner = ownerA
+
+  _apiB <- submit ownerB do
+    create PublicApiMaster with owner = ownerB
+
+
+  _transferFromBToAProposal <- submit ownerB do
+    create TransferResponseProposal with
+      transfer = TransferResponse with
+        origin = ownerB
+        destination = ownerA
+        message = "Transferring a message from OwnerB to OwnerA"
+
+  _transfer <- submit ownerA do
+    exercise _transferFromBToAProposal
+      TransferResponseProposal_Accept
+
+  pure ()

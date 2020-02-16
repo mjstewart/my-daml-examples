@@ -1,0 +1,20 @@
+daml 1.2
+module TransferResponseProposal where
+
+import TransferResponse
+import PublicApiMaster
+import Response
+
+template TransferResponseProposal
+  with
+    transfer : TransferResponse
+  where
+    signatory transfer.origin
+
+    controller transfer.destination can
+      TransferResponseProposal_Accept : ContractId Response
+        do
+          exerciseByKey
+            @PublicApiMaster transfer.destination
+            PublicApiMaster_Response with
+              message = transfer.message

@@ -1,0 +1,12 @@
+daml 1.2
+module TransferResponse where
+
+template TransferResponse
+  with
+    origin : Party
+    destination : Party
+    message : Text
+  where
+    signatory origin, destination
+
+    
