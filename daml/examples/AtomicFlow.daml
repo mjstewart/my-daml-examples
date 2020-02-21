@@ -1,0 +1,113 @@
+daml 1.2
+module AtomicFlow where
+
+data CoinKey = CoinKey with
+  owner : Party
+  id : Text
+    deriving (Show, Eq)
+
+toCoinKey : Coin -> CoinKey
+toCoinKey Coin{..} = CoinKey with ..
+
+template Coin
+  with
+    owner : Party
+    id : Text
+    amount : Decimal
+  where
+    signatory owner
+
+    key CoinKey with .. : CoinKey
+    maintainer key.owner
+
+    controller owner can
+      Coin_CommitTransfer : ContractId CommittedCoin
+        with
+          receivingCoinKey : CoinKey
+        do
+          -- Alice updates her account without involving bob
+          create this with amount = 0.0
+
+          proposalCid <- create TransferCoinAmountProposal with
+            sendingCoinKey = toCoinKey this
+            receivingCoinKey
+            amount
+
+          create CommittedCoin with
+            sender = owner
+            receiver = receivingCoinKey.owner
+            proposalCid
+
+      Coin_ApplyAmount : ContractId Coin
+        with
+          delta : Decimal
+        do
+          create this with amount = amount + delta
+
+
+template TransferCoinAmountProposal
+  with
+    sendingCoinKey : CoinKey
+    receivingCoinKey : CoinKey
+    amount : Decimal
+  where
+    signatory sendingCoinKey.owner
+
+
+template CommittedCoin
+  with
+    sender : Party
+    receiver : Party
+    proposalCid : ContractId TransferCoinAmountProposal
+  where
+    signatory sender
+
+    controller sender can
+
+      -- return value could be rollback details
+      CommittedCoin_SenderRollback : ()
+        do
+         proposal <- fetch proposalCid
+
+         exerciseByKey @Coin proposal.sendingCoinKey $ Coin_ApplyAmount proposal.amount
+         archive proposalCid
+
+         pure ()
+
+    controller receiver can
+      CommittedCoin_ReceiverAcceptProposal : ()
+        do
+         proposal <- fetch proposalCid
+
+         exerciseByKey @Coin proposal.receivingCoinKey $ Coin_ApplyAmount proposal.amount
+         archive proposalCid
+
+         pure ()
+
+
+
+
+test = scenario do
+  [alice, bob] <- mapA getParty ["Alice", "Bob"]
+
+  _aliceCoin <- submit alice do
+    create Coin with owner = alice; id = "1"; amount = 100.0
+
+  _bobCoin <- submit bob do
+    create Coin with owner = bob; id = "2"; amount = 100.0
+
+  _aliceCommit <- submit alice do
+    exercise _aliceCoin Coin_CommitTransfer with receivingCoinKey = CoinKey bob "2"
+
+  --submit alice do
+    --exercise _aliceCommit CommittedCoin_SenderRollback
+
+  submit bob do
+    exercise _aliceCommit CommittedCoin_ReceiverAcceptProposal
+
+
+
+
+
+-- x = scenario do
+  -- pure $ intToNumeric 0

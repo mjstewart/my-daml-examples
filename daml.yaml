@@ -1,4 +1,4 @@
-sdk-version: 0.13.40
+sdk-version: 0.13.46
 name: my-daml-examples
 source: daml
 scenario: Main:setup
