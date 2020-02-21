@@ -53,6 +53,20 @@ template TransferCoinAmountProposal
   where
     signatory sendingCoinKey.owner
 
+    controller receivingCoinKey.owner can
+      TransferCoinAmountProposal_Accept : ContractId TransferredCoinAmount
+        do
+          create TransferredCoinAmount with ..
+
+
+
+template TransferredCoinAmount
+  with
+    sendingCoinKey : CoinKey
+    receivingCoinKey : CoinKey
+    amount : Decimal
+  where
+    signatory sendingCoinKey.owner, receivingCoinKey.owner
 
 template CommittedCoin
   with
@@ -80,7 +94,7 @@ template CommittedCoin
          proposal <- fetch proposalCid
 
          exerciseByKey @Coin proposal.receivingCoinKey $ Coin_ApplyAmount proposal.amount
-         archive proposalCid
+         exercise proposalCid TransferCoinAmountProposal_Accept
 
          pure ()
 
@@ -99,8 +113,6 @@ test = scenario do
   _aliceCommit <- submit alice do
     exercise _aliceCoin Coin_CommitTransfer with receivingCoinKey = CoinKey bob "2"
 
-  --submit alice do
-    --exercise _aliceCommit CommittedCoin_SenderRollback
 
   submit bob do
     exercise _aliceCommit CommittedCoin_ReceiverAcceptProposal
