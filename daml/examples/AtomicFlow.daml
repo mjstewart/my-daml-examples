@@ -9,6 +9,7 @@ data CoinKey = CoinKey with
 toCoinKey : Coin -> CoinKey
 toCoinKey Coin{..} = CoinKey with ..
 
+
 template Coin
   with
     owner : Party
@@ -20,6 +21,7 @@ template Coin
     key CoinKey with .. : CoinKey
     maintainer key.owner
 
+    -- Alice wants to transfer the amount contained in her coin to bob.
     controller owner can
       Coin_CommitTransfer : ContractId CommittedCoin
         with
@@ -38,35 +40,23 @@ template Coin
             receiver = receivingCoinKey.owner
             proposalCid
 
+      -- Same thing as the above but combines the proposal and commited coin concept.
+      Coin_CommitTransfer2 : ContractId TransferCommitmentProposal
+        with
+          receivingCoinKey : CoinKey
+        do
+          create this with amount = 0.0
+
+          create TransferCommitmentProposal with
+            sendingCoinKey = toCoinKey this
+            receivingCoinKey
+            amount
+
       Coin_ApplyAmount : ContractId Coin
         with
           delta : Decimal
         do
           create this with amount = amount + delta
-
-
-template TransferCoinAmountProposal
-  with
-    sendingCoinKey : CoinKey
-    receivingCoinKey : CoinKey
-    amount : Decimal
-  where
-    signatory sendingCoinKey.owner
-
-    controller receivingCoinKey.owner can
-      TransferCoinAmountProposal_Accept : ContractId TransferredCoinAmount
-        do
-          create TransferredCoinAmount with ..
-
-
-
-template TransferredCoinAmount
-  with
-    sendingCoinKey : CoinKey
-    receivingCoinKey : CoinKey
-    amount : Decimal
-  where
-    signatory sendingCoinKey.owner, receivingCoinKey.owner
 
 template CommittedCoin
   with
@@ -78,7 +68,6 @@ template CommittedCoin
 
     controller sender can
 
-      -- return value could be rollback details
       CommittedCoin_SenderRollback : ()
         do
          proposal <- fetch proposalCid
@@ -99,6 +88,55 @@ template CommittedCoin
          pure ()
 
 
+template TransferCoinAmountProposal
+  with
+    sendingCoinKey : CoinKey
+    receivingCoinKey : CoinKey
+    amount : Decimal
+  where
+    signatory sendingCoinKey.owner
+
+    controller sendingCoinKey.owner, receivingCoinKey.owner can
+      TransferCoinAmountProposal_Accept : ContractId TransferredCoinAmount
+        do
+          create TransferredCoinAmount with ..
+
+
+-- Represents when both alice and bob have actioned the transfer
+template TransferredCoinAmount
+  with
+    sendingCoinKey : CoinKey
+    receivingCoinKey : CoinKey
+    amount : Decimal
+  where
+    signatory sendingCoinKey.owner, receivingCoinKey.owner
+
+
+
+-- It appears this contract can act the same as the CoinCommitment contract.
+template TransferCommitmentProposal
+  with
+    sendingCoinKey : CoinKey
+    receivingCoinKey : CoinKey
+    amount : Decimal
+  where
+    signatory sendingCoinKey.owner
+
+    controller sendingCoinKey.owner can
+
+      TransferCommitmentProposal_SenderRollback : ()
+        do
+         exerciseByKey @Coin sendingCoinKey $ Coin_ApplyAmount amount
+         pure ()
+
+    controller receivingCoinKey.owner can
+      TransferCommitmentProposal_ReceiverAcceptProposal : ()
+        do
+         -- Once Bob accepts completing the transfer process between the 2 parties.
+         exerciseByKey @Coin receivingCoinKey $ Coin_ApplyAmount amount
+         create TransferredCoinAmount with ..
+
+         pure ()
 
 
 test = scenario do
@@ -113,13 +151,8 @@ test = scenario do
   _aliceCommit <- submit alice do
     exercise _aliceCoin Coin_CommitTransfer with receivingCoinKey = CoinKey bob "2"
 
-
   submit bob do
     exercise _aliceCommit CommittedCoin_ReceiverAcceptProposal
 
-
-
-
-
--- x = scenario do
-  -- pure $ intToNumeric 0
+  -- submit bob do
+    -- exercise _aliceCommit TransferCommitmentProposal_ReceiverAcceptProposal
