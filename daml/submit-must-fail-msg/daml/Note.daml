@@ -1,0 +1,42 @@
+daml 1.2
+module Note where
+
+import DA.Text qualified as Text
+-- import DA.Scenario qualified as S
+import DA.List qualified as L
+import DA.Assert
+
+template TestHelper
+  with
+    owner : Party
+    id : Int
+    description : Text
+  where
+    signatory owner
+
+    controller owner can
+      TestHelper_Run : ContractId TestHelper
+        with
+          id' : Int
+        do
+          assertMsg "id must be over 18" $ id' > 18
+          assertMsg "id must be less than 100" $ id' < 100
+          assertMsg "id must be even" $ id' % 2 == 0
+          create this with id = id'
+
+test = scenario do
+  owner <- getParty "Alice"
+
+  _helper <- submit owner do
+    create TestHelper with
+      owner
+      description = "do something"
+      id = 1
+
+  actual <- submitMustFailMsg owner do
+      exercise _helper TestHelper_Run with id' = 20
+  assertEq "id must be over 18" actual
+
+  -- assertEq "id must be over 18" =<<
+    -- submitMustFailMsg owner do
+      -- exercise _helper TestHelper_Run with id' = 19

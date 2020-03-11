@@ -1,0 +1,12 @@
+sdk-version: 0.0.0
+name: submit-must-fail-msg
+source: daml
+parties:
+  - Alice
+  - Bob
+version: 0.0.0
+dependencies:
+  - daml-prim
+  - daml-stdlib
+build-options:
+  - --target=1.dev
