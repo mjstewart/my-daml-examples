@@ -1,0 +1,26 @@
+Since daml-sdk-head uses ~/.daml to dump 0.0.0 sdk into, I set the path manually to point to this location for local dev rather than use my nix daml.
+
+PATH=/home/matt/.daml/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/home/matt/.zsh/plugins/zsh-syntax-highlighting:/home/matt/.nix-profile/bin
+
+
+which is a bit faster if you don’t care about maven artifacts being installed to ~/.m2 (which doesn’t matter if you just want to invoke the SDK tools
+
+daml-sdk-head --skip-jars  
+
+
+# this needs to be set in your `daml.yaml` on your dummy project that is pointing to your dev sdk build.
+
+```
+sdk-version: 0.0.0
+name: submit-must-fail-msg
+source: daml
+parties:
+  - Alice
+  - Bob
+version: 0.0.0
+dependencies:
+  - daml-prim
+  - daml-stdlib
+build-options:
+  - --target=1.dev
+```
